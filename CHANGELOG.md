@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.2
+
+[compare changes](https://gitlab.com/miinded/nestjs-paginate/compare/v0.0.1...v0.0.2)
+
+### 🩹 Fixes
+
+- Some issues ([2b52c61](https://gitlab.com/miinded/nestjs-paginate/commit/2b52c61))
+
+### ❤️ Contributors
+
+- Starker-xp <starker-xp@miinded.com>
+
 ## v0.0.1
 
 
