@@ -62,7 +62,7 @@
   },
   "peerDependencies": {
     "@nestjs/common": "^10.4.15",
-    "@nestjs/swagger": "^8.0.7",
+    "@nestjs/swagger": "^7.4.2",
     "express": "^4.21.2",
     "nestjs-paginate": "^10.0.0",
     "typeorm": "^0.3.20"

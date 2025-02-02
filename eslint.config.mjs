@@ -10,6 +10,8 @@ export default tseslint.config(
       //
       'eslint.config.mjs',
       'lib/',
+      'src/__tests__/**/*',
+      'src/**/**.spec.*',
     ],
   },
   eslint.configs.recommended,

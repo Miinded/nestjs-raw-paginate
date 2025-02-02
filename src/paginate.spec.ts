@@ -4,7 +4,7 @@ import { OrderEntity } from './__tests__/order.entity';
 import { OrderRefundEntity } from './__tests__/orderRefund.entity';
 import { FilterOperator, FilterSuffix, PaginateConfig, Paginated, PaginateQuery } from 'nestjs-paginate';
 import { DataSource, Repository } from 'typeorm';
-import { BaseDataSourceOptions } from 'typeorm/data-source/BaseDataSourceOptions';
+import { BaseDataSourceOptions } from 'typeorm/data-source/BaseDataSourceOptions.js';
 import { rawPaginate } from './paginate';
 
 describe('paginate', () => {
