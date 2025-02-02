@@ -1,0 +1,4 @@
+__tests__/
+__test__/
+*.spec.ts
+*.test.ts

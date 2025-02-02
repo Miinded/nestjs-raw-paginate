@@ -1,0 +1,100 @@
+{
+  "name": "@miinded/nestjs-paginate",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git@gitlab.com:miinded/nestjs-paginate.git"
+  },
+  "description": "Pagination and filtering helper method for raw query using Nest.js framework.",
+  "license": "MIT",
+  "author": "Starker-xp <starker-xp@miinded.com>",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib/**/*",
+    "!lib/__tests__/**/*",
+    "!lib/**/*.spec.*",
+    "!lib/tsconfig.tsbuildinfo"
+  ],
+  "scripts": {
+    "prebuild": "rimraf lib",
+    "build": "tsc --project tsconfig.json",
+    "prepare": "npm run build",
+    "release": "npm run lint && npm run build && changelogen --release && npm publish && git push --follow-tags",
+    "lint": "eslint .",
+    "test": "jest",
+    "test:watch": "jest --watch ",
+    "test:cov": "jest --coverage",
+    "test:covw": "jest --coverage  --watch",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.19.0",
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/testing": "^10.4.15",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.14",
+    "@types/lodash": "^4.17.15",
+    "@types/node": "^22.13.0",
+    "changelogen": "^0.5.7",
+    "dotenv": "^16.4.7",
+    "eslint": "^9.19.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
+    "globals": "^15.14.0",
+    "jest": "^29.7.0",
+    "mysql": "^2.18.1",
+    "prettier": "^3.4.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "sqlite3": "^5.1.7",
+    "ts-jest": "^29.2.5",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "typeorm": "^0.3.20",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.22.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/swagger": "^8.0.7",
+    "express": "^4.21.2",
+    "nestjs-paginate": "^10.0.0",
+    "typeorm": "^0.3.20"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/lib/"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      "/lib/"
+    ]
+  },
+  "release": {
+    "branches": [
+      "master"
+    ]
+  }
+}
