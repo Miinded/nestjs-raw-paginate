@@ -7,6 +7,7 @@ import { Brackets, FindOperator, JsonContains, ObjectLiteral, SelectQueryBuilder
 import { mapKeys } from 'lodash';
 import { stringify } from 'querystring';
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
+import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause';
 
 export type RawPaginateConfig<T> = Omit<OPaginateConfig<T>, 'where' | 'relations' | 'loadEagerRelations'> & {
   metadataColumns?: {
@@ -132,6 +133,67 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
     } else {
       searchBy.push(...config.searchableColumns);
     }
+  }
+
+  if (query.search && searchBy.length) {
+    queryBuilder.andWhere(
+      new Brackets((qb: SelectQueryBuilder<T>) => {
+        // Explicitly handle the default case - multiWordSearch defaults to false
+        const useMultiWordSearch = config.multiWordSearch ?? false;
+        if (!useMultiWordSearch) {
+          // Strict search mode (default behavior)
+          for (const column of searchBy) {
+            const property = getPropertiesByColumnName(column);
+            const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, property);
+            const isRelation = checkIsRelation(qb, property.propertyPath);
+            const isEmbedded = checkIsEmbedded(qb, property.propertyPath);
+            const alias = fixColumnAlias(property, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery);
+
+            const condition: WherePredicateOperator = {
+              operator: 'ilike',
+              parameters: [alias, `:${property.column}`],
+            };
+
+            if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+              condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`;
+            }
+
+            qb.orWhere(qb['createWhereConditionExpression'](condition), {
+              [property.column]: `%${query.search}%`,
+            });
+          }
+        } else {
+          // Multi-word search mode
+          const searchWords = query.search.split(' ').filter((word) => word.length > 0);
+          searchWords.forEach((searchWord, index) => {
+            qb.andWhere(
+              new Brackets((subQb: SelectQueryBuilder<T>) => {
+                for (const column of searchBy) {
+                  const property = getPropertiesByColumnName(column);
+                  const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(subQb, property);
+                  const isRelation = checkIsRelation(subQb, property.propertyPath);
+                  const isEmbedded = checkIsEmbedded(subQb, property.propertyPath);
+                  const alias = fixColumnAlias(property, subQb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery);
+
+                  const condition: WherePredicateOperator = {
+                    operator: 'ilike',
+                    parameters: [alias, `:${property.column}_${index}`],
+                  };
+
+                  if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                    condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`;
+                  }
+
+                  subQb.orWhere(subQb['createWhereConditionExpression'](condition), {
+                    [`${property.column}_${index}`]: `%${searchWord}%`,
+                  });
+                }
+              }),
+            );
+          });
+        }
+      }),
+    );
   }
 
   if (query.filter) {
