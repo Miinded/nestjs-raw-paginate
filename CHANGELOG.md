@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.3
+
+[compare changes](https://gitlab.com/miinded/nestjs-paginate/compare/v0.0.2...v0.0.3)
+
+### 🩹 Fixes
+
+- On remet la partie search en place ([31b917b](https://gitlab.com/miinded/nestjs-paginate/commit/31b917b))
+
+### ❤️ Contributors
+
+- Starker-xp <starker-xp@miinded.com>
+
 ## v0.0.2
 
 [compare changes](https://gitlab.com/miinded/nestjs-paginate/compare/v0.0.1...v0.0.2)
