@@ -81,8 +81,8 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
     const columnProperties = getPropertiesByColumnName(order[0]);
     const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties);
 
-    const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath);
-    const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath);
+    const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath!);
+    const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath!);
     let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded);
 
     if (isMMDb) {
@@ -103,17 +103,17 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
 
   // When we partial select the columns (main or relation) we must add the primary key column otherwise
   // typeorm will not be able to map the result.
-  let selectParams = config.select && query.select && !config.ignoreSelectInQueryParam ? config.select.filter((column) => query.select.includes(column)) : config.select;
-  if (!includesAllPrimaryKeyColumns(queryBuilder, query.select)) {
+  let selectParams = config.select && query.select && !config.ignoreSelectInQueryParam ? config.select.filter((column) => query.select?.includes(column)) : config.select;
+  if (query.select && !includesAllPrimaryKeyColumns(queryBuilder, query.select)) {
     selectParams = config.select;
   }
-  if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const cols: string[] = selectParams.reduce((cols, currentCol) => {
+  if (selectParams && selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
+    const cols: string[] = selectParams.reduce((cols: string[], currentCol) => {
       const columnProperties = getPropertiesByColumnName(currentCol);
-      const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath);
-      cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath!);
+      const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation);
+      cols.push(alias);
+
       return cols;
     }, []);
     queryBuilder.select(cols);
@@ -145,8 +145,8 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
           for (const column of searchBy) {
             const property = getPropertiesByColumnName(column);
             const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, property);
-            const isRelation = checkIsRelation(qb, property.propertyPath);
-            const isEmbedded = checkIsEmbedded(qb, property.propertyPath);
+            const isRelation = checkIsRelation(qb, property.propertyPath!);
+            const isEmbedded = checkIsEmbedded(qb, property.propertyPath!);
             const alias = fixColumnAlias(property, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery);
 
             const condition: WherePredicateOperator = {
@@ -164,15 +164,15 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
           }
         } else {
           // Multi-word search mode
-          const searchWords = query.search.split(' ').filter((word) => word.length > 0);
-          searchWords.forEach((searchWord, index) => {
+          const searchWords = query.search?.split(' ').filter((word) => word.length > 0);
+          searchWords?.forEach((searchWord, index) => {
             qb.andWhere(
               new Brackets((subQb: SelectQueryBuilder<T>) => {
                 for (const column of searchBy) {
                   const property = getPropertiesByColumnName(column);
                   const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(subQb, property);
-                  const isRelation = checkIsRelation(subQb, property.propertyPath);
-                  const isEmbedded = checkIsEmbedded(subQb, property.propertyPath);
+                  const isRelation = checkIsRelation(subQb, property.propertyPath!);
+                  const isEmbedded = checkIsEmbedded(subQb, property.propertyPath!);
                   const alias = fixColumnAlias(property, subQb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery);
 
                   const condition: WherePredicateOperator = {
@@ -215,7 +215,7 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
 
   // Only expose select in meta data if query select differs from config select
   const isQuerySelected = selectParams?.length !== config.select?.length;
-  const selectQuery = isQuerySelected ? `&select=${selectParams.join(',')}` : '';
+  const selectQuery = isQuerySelected ? `&select=${selectParams?.join(',')}` : '';
 
   const filterQuery = query.filter
     ? '&' +
@@ -229,7 +229,7 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
 
   const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`;
 
-  let path: string = null;
+  let path: string | null = null;
   if (query.path !== null) {
     // `query.path` does not exist in RPC/WS requests and is set to null then.
     const { queryOrigin, queryPath } = getQueryUrlComponents(query.path);
@@ -253,9 +253,9 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
       currentPage: page,
       totalPages,
       sortBy,
-      search: query.search,
-      searchBy: query.search ? searchBy : undefined,
-      select: isQuerySelected ? selectParams : undefined,
+      search: query.search!,
+      searchBy: query.search ? searchBy : [],
+      select: isQuerySelected ? selectParams || [] : [],
       filter: query.filter,
     },
     // If there is no `path`, don't build links.
@@ -296,7 +296,7 @@ export async function getCount(qb: SelectQueryBuilder<ObjectLiteral>) {
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> };
 type ColumnsFilters = { [columnName: string]: Filter[] };
 
-export function parseFilterForRawQuery<T>(query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, qb?: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }): ColumnsFilters {
+export function parseFilterForRawQuery<T extends ObjectLiteral>(query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, qb?: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }): ColumnsFilters {
   const filter: ColumnsFilters = {};
   if (!filterableColumns || !query.filter) {
     return {};
@@ -331,29 +331,29 @@ export function parseFilterForRawQuery<T>(query: PaginateQuery, filterableColumn
 
       const params: (typeof filter)[0][0] = {
         comparator: token.comparator,
-        findOperator: undefined,
+        findOperator: undefined!,
       };
-      const fixValue = fixRawColumnFilterValue(column, qb, metadataColumns);
+      const fixValue = fixRawColumnFilterValue(column, qb!, metadataColumns);
 
       const columnProperties = getPropertiesByColumnName(column);
-      const isJsonb = checkIsJsonb(qb, columnProperties.column);
+      const isJsonb = checkIsJsonb(qb!, columnProperties.column);
 
       switch (token.operator) {
         case FilterOperator.BTW:
-          params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(',').map(fixValue));
+          params.findOperator = OperatorSymbolToFunction.get(token.operator)!(...token.value.split(',').map(fixValue));
           break;
         case FilterOperator.IN:
         case FilterOperator.CONTAINS:
-          params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','));
+          params.findOperator = OperatorSymbolToFunction.get(token.operator)!(token.value.split(','));
           break;
         case FilterOperator.ILIKE:
-          params.findOperator = OperatorSymbolToFunction.get(token.operator)(`%${token.value}%`);
+          params.findOperator = OperatorSymbolToFunction.get(token.operator)!(`%${token.value}%`);
           break;
         case FilterOperator.SW:
-          params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`);
+          params.findOperator = OperatorSymbolToFunction.get(token.operator)!(`${token.value}%`);
           break;
         default:
-          params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value));
+          params.findOperator = OperatorSymbolToFunction.get(token.operator)!(fixValue(token.value));
       }
 
       if (isJsonb) {
@@ -361,7 +361,7 @@ export function parseFilterForRawQuery<T>(query: PaginateQuery, filterableColumn
         const dbColumnName = parts[parts.length - 2];
         const jsonColumnName = parts[parts.length - 1];
 
-        const jsonFixValue = fixRawColumnFilterValue(column, qb, metadataColumns, true);
+        const jsonFixValue = fixRawColumnFilterValue(column, qb!, metadataColumns, true);
 
         const jsonParams = {
           comparator: params.comparator,
@@ -381,21 +381,23 @@ export function parseFilterForRawQuery<T>(query: PaginateQuery, filterableColumn
 
       if (token.suffix) {
         const lastFilterElement = filter[column].length - 1;
-        filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)(filter[column][lastFilterElement].findOperator);
+        filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)!(filter[column][lastFilterElement].findOperator);
       }
     }
   }
   return filter;
 }
 
-export function formatFilter<T>(qb: SelectQueryBuilder<T>, query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, metadataColumns?: { [column: string]: string }) {
+export function formatFilter<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, metadataColumns?: { [column: string]: string }) {
   if (qb?.expressionMap?.mainAlias?.hasMetadata) {
     return parseFilter(query, filterableColumns, qb);
   }
   return parseFilterForRawQuery(query, filterableColumns, qb, metadataColumns);
 }
 
-export function addFilter<T>(qb: SelectQueryBuilder<T>, query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, metadataColumns?: { [column: string]: string }): SelectQueryBuilder<T> {
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+export function addFilter<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true } | any, metadataColumns?: { [column: string]: string }): SelectQueryBuilder<T> {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const filter = formatFilter(qb, query, filterableColumns, metadataColumns);
 
   const filterEntries = Object.entries(filter);
@@ -423,7 +425,7 @@ export function addFilter<T>(qb: SelectQueryBuilder<T>, query: PaginateQuery, fi
   return qb;
 }
 
-export function fixRawColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }, isJsonb = false) {
+export function fixRawColumnFilterValue<T extends ObjectLiteral>(column: string, qb: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }, isJsonb = false) {
   // Instancier un objet temporaire de T
   const columnType = metadataColumns && metadataColumns[column] ? metadataColumns[column] : 'string';
 
@@ -441,12 +443,12 @@ export function fixRawColumnFilterValue<T>(column: string, qb: SelectQueryBuilde
 }
 
 // It's only overrided for extractVirtualProperty method.
-export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
+export function addWhereCondition<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
   const columnProperties = getPropertiesByColumnName(column);
 
   const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties);
-  const isRelation = checkIsRelation(qb, columnProperties.propertyPath);
-  const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath);
+  const isRelation = checkIsRelation(qb, columnProperties.propertyPath!);
+  const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath!);
   const isArray = checkIsArray(qb, columnProperties.propertyName);
 
   const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery);
@@ -468,7 +470,7 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function extractVirtualProperty(qb: SelectQueryBuilder<unknown>, columnProperties: ColumnProperties): Partial<ColumnMetadata> {
+export function extractVirtualProperty<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, columnProperties: ColumnProperties): Partial<ColumnMetadata> {
   return {
     isVirtualProperty: false,
     query: undefined,
@@ -476,11 +478,11 @@ export function extractVirtualProperty(qb: SelectQueryBuilder<unknown>, columnPr
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function checkIsArray(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
+export function checkIsArray<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, propertyName: string): boolean {
   return false;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
+export function checkIsJsonb<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, propertyName: string): boolean {
   return false;
 }

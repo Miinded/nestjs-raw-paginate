@@ -35,7 +35,7 @@ describe('paginate', () => {
       ...dbOptions,
       type: 'mariadb',
       host: process.env.DB_HOST || 'localhost',
-      port: +process.env.MARIA_DB_PORT || 3800,
+      port: +(process.env.MARIA_DB_PORT || 3800),
       username: process.env.DB_USERNAME || 'rawpaginate',
       password: process.env.DB_PASSWORD || 'rawpaginate',
       database: process.env.DB_DATABASE || 'rawpaginate',
