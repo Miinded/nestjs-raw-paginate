@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.4
+
+[compare changes](https://gitlab.com/miinded/nestjs-paginate/compare/v0.0.3...v0.0.4)
+
+### 🏡 Chore
+
+- Update to nestjs11 ([5402141](https://gitlab.com/miinded/nestjs-paginate/commit/5402141))
+
+### ❤️ Contributors
+
+- Starker-xp <starker-xp@miinded.com>
+
 ## v0.0.3
 
 [compare changes](https://gitlab.com/miinded/nestjs-paginate/compare/v0.0.2...v0.0.3)
