@@ -97,7 +97,7 @@ describe('paginate', () => {
     ]);
   });
 
-  xit('should return an instance of Paginated width default limit', async () => {
+  it('should return an instance of Paginated width default limit', async () => {
     const config: PaginateConfig<QueryDto> = {
       sortableColumns: ['orderId'],
       defaultSortBy: [['orderId', 'DESC']],
@@ -178,7 +178,7 @@ describe('paginate', () => {
     });
   });
 
-  xit('should return an instance of Paginated', async () => {
+  it('should return an instance of Paginated', async () => {
     const config: PaginateConfig<QueryDto> = {
       sortableColumns: ['orderId'],
       defaultSortBy: [['orderId', 'DESC']],

@@ -8,6 +8,7 @@ import { mapKeys } from 'lodash';
 import { stringify } from 'querystring';
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause';
+import globalConfig from 'nestjs-paginate/lib/global-config';
 
 export type RawPaginateConfig<T> = Omit<OPaginateConfig<T>, 'where' | 'relations' | 'loadEagerRelations'> & {
   metadataColumns?: {
@@ -18,8 +19,8 @@ export type RawPaginateConfig<T> = Omit<OPaginateConfig<T>, 'where' | 'relations
 export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery, qb: SelectQueryBuilder<T>, config: RawPaginateConfig<T>): Promise<Paginated<T>> {
   const page = positiveNumberOrDefault(query.page, 1, 1);
 
-  const defaultLimit = config.defaultLimit || PaginationLimit.DEFAULT_LIMIT;
-  const maxLimit = config.maxLimit || PaginationLimit.DEFAULT_MAX_LIMIT;
+  const defaultLimit = config.defaultLimit || globalConfig.defaultLimit;
+  const maxLimit = config.maxLimit || globalConfig.defaultMaxLimit;
   const isPaginated = !(query.limit === PaginationLimit.COUNTER_ONLY || (query.limit === PaginationLimit.NO_PAGINATION && maxLimit === PaginationLimit.NO_PAGINATION));
 
   const limit = query.limit === PaginationLimit.COUNTER_ONLY ? PaginationLimit.COUNTER_ONLY : isPaginated === true ? (maxLimit === PaginationLimit.NO_PAGINATION ? (query.limit ?? defaultLimit) : query.limit === PaginationLimit.NO_PAGINATION ? defaultLimit : Math.min(query.limit ?? defaultLimit, maxLimit)) : defaultLimit;
