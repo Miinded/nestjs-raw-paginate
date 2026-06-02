@@ -33,7 +33,7 @@
     "@nestjs/platform-express": "^11.1.6",
     "express": "^5.1.0",
     "lodash": "^4.17.21",
-    "nestjs-paginate": "^12.8.3",
+    "nestjs-paginate": "^13.3.0",
     "typeorm": "0.3.27"
   },
   "devDependencies": {
@@ -64,6 +64,7 @@
     "typescript-eslint": "^8.45.0"
   },
   "jest": {
+    "maxWorkers": 1,
     "moduleFileExtensions": [
       "js",
       "json",

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 import { ServiceUnavailableException } from '@nestjs/common';
 import { PaginateConfig as OPaginateConfig, Paginated, PaginateQuery, PaginationLimit, PaginationType } from 'nestjs-paginate';
-import { Column, positiveNumberOrDefault, SortBy, isEntityKey, Order, getPropertiesByColumnName, checkIsRelation, checkIsEmbedded, fixColumnAlias, includesAllPrimaryKeyColumns, getQueryUrlComponents, isISODate, ColumnProperties } from 'nestjs-paginate/lib/helper';
-import { FilterComparator, FilterOperator, FilterSuffix, fixQueryParam, generatePredicateCondition, isOperator, isSuffix, OperatorSymbolToFunction, parseFilter, parseFilterToken } from 'nestjs-paginate/lib/filter';
+import { Column, positiveNumberOrDefault, SortBy, isEntityKey, Order, getPropertiesByColumnName, checkIsRelation, checkIsEmbedded, fixColumnAlias, includesAllPrimaryKeyColumns, getQueryUrlComponents, isISODate, ColumnProperties, getPaddedExpr } from 'nestjs-paginate/lib/helper';
+import { FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix, fixQueryParam, generatePredicateCondition, isOperator, isSuffix, OperatorSymbolToFunction, parseFilter, parseFilterToken } from 'nestjs-paginate/lib/filter';
 import { Brackets, FindOperator, JsonContains, ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { mapKeys } from 'lodash';
 import { stringify } from 'querystring';
@@ -15,6 +15,113 @@ export type RawPaginateConfig<T> = Omit<OPaginateConfig<T>, 'where' | 'relations
     [key: string]: string;
   };
 };
+
+// ---------------------------------------------------------------------------
+// Cursor pagination — faithful port of nestjs-paginate's encoders.
+// The only adaptation for raw mode is the column-type detection: the official
+// reads it from the entity metadata, here we read it from `config.metadataColumns`.
+// ---------------------------------------------------------------------------
+
+function fixCursorValue(value: unknown): unknown {
+  if (typeof value === 'string' && isISODate(value)) {
+    return new Date(value);
+  }
+  return value;
+}
+
+function generateNullCursor(): string {
+  return 'A' + '0'.repeat(15); // null values should be looked up last, so use the smallest prefix
+}
+
+function generateDateCursor(value: number, direction: 'ASC' | 'DESC'): string {
+  if (direction === 'ASC' && value === 0) {
+    return 'X' + '0'.repeat(15);
+  }
+
+  const finalValue = direction === 'ASC' ? Math.pow(10, 15) - value : value;
+
+  return 'V' + String(finalValue).padStart(15, '0');
+}
+
+function generateNumberCursor(value: number, direction: 'ASC' | 'DESC'): string {
+  const integerLength = 11;
+  const decimalLength = 4; // sorting is not possible if the decimal point exceeds 4 digits
+  const maxIntegerDigit = Math.pow(10, integerLength);
+  const fixedScale = Math.pow(10, decimalLength);
+  const absValue = Math.abs(value);
+  const scaledValue = Math.round(absValue * fixedScale);
+  const integerPart = Math.floor(scaledValue / fixedScale);
+  const decimalPart = scaledValue % fixedScale;
+
+  let integerPrefix: string;
+  let decimalPrefix: string;
+  let finalInteger: number;
+  let finalDecimal: number;
+
+  if (direction === 'ASC') {
+    if (value < 0) {
+      integerPrefix = 'Y';
+      decimalPrefix = 'V';
+      finalInteger = integerPart;
+      finalDecimal = decimalPart;
+    } else if (value === 0) {
+      integerPrefix = 'X';
+      decimalPrefix = 'X';
+      finalInteger = 0;
+      finalDecimal = 0;
+    } else {
+      integerPrefix = integerPart === 0 ? 'X' : 'V'; // X > V
+      decimalPrefix = decimalPart === 0 ? 'X' : 'V'; // X > V
+      finalInteger = integerPart === 0 ? 0 : maxIntegerDigit - integerPart;
+      finalDecimal = decimalPart === 0 ? 0 : fixedScale - decimalPart;
+    }
+  } else {
+    // DESC
+    if (value < 0) {
+      integerPrefix = integerPart === 0 ? 'N' : 'M'; // N > M
+      decimalPrefix = decimalPart === 0 ? 'X' : 'V'; // X > V
+      finalInteger = integerPart === 0 ? 0 : maxIntegerDigit - integerPart;
+      finalDecimal = decimalPart === 0 ? 0 : fixedScale - decimalPart;
+    } else if (value === 0) {
+      integerPrefix = 'N';
+      decimalPrefix = 'X';
+      finalInteger = 0;
+      finalDecimal = 0;
+    } else {
+      integerPrefix = 'V';
+      decimalPrefix = 'V';
+      finalInteger = integerPart;
+      finalDecimal = decimalPart;
+    }
+  }
+
+  return integerPrefix + String(finalInteger).padStart(integerLength, '0') + decimalPrefix + String(finalDecimal).padStart(decimalLength, '0');
+}
+
+function isDateMetadataColumn(metadataColumns: { [column: string]: string } | undefined, column: string): boolean {
+  const type = metadataColumns?.[column];
+  return typeof type === 'string' && type.toLowerCase() === 'date';
+}
+
+// Raw equivalent of the official `generateCursor`: raw rows are flat objects keyed by
+// the SELECT alias, so we read `item[column]` directly instead of traversing relations.
+function generateRawCursor<T extends ObjectLiteral>(item: T, sortBy: SortBy<T>, metadataColumns?: { [column: string]: string }): string {
+  return sortBy
+    .map(([column, direction]) => {
+      const value = fixCursorValue((item as Record<string, unknown>)[String(column)]);
+
+      if (value === null || value === undefined) {
+        return generateNullCursor();
+      }
+
+      if (isDateMetadataColumn(metadataColumns, String(column))) {
+        return generateDateCursor(new Date(value as string | number | Date).getTime(), direction);
+      }
+
+      return generateNumberCursor(Number(value), direction);
+    })
+    .join('');
+}
 
 export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery, qb: SelectQueryBuilder<T>, config: RawPaginateConfig<T>): Promise<Paginated<T>> {
   const page = positiveNumberOrDefault(query.page, 1, 1);
@@ -42,6 +149,8 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
     // However, using limit/offset can cause problems when joining one-to-many etc.
     if (config.paginationType === PaginationType.LIMIT_AND_OFFSET) {
       queryBuilder.limit(limit).offset((page - 1) * limit);
+    } else if (config.paginationType === PaginationType.CURSOR) {
+      queryBuilder.take(limit);
     } else {
       queryBuilder.take(limit).skip((page - 1) * limit);
     }
@@ -78,27 +187,143 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
     sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]));
   }
 
-  for (const order of sortBy) {
-    const columnProperties = getPropertiesByColumnName(order[0]);
-    const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties);
+  const isCursorPagination = isPaginated && config.paginationType === PaginationType.CURSOR;
 
-    const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath!);
-    const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath!);
-    let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded);
+  if (isCursorPagination) {
+    // Cursor pagination — port of the official SQL expression builders. The column-type
+    // detection (date vs number) comes from `config.metadataColumns` instead of entity metadata.
+    const padLength = 15;
+    const integerLength = 11;
+    const decimalLength = 4;
+    const fixedScale = Math.pow(10, decimalLength);
+    const maxIntegerDigit = Math.pow(10, integerLength);
 
-    if (isMMDb) {
-      if (isVirtualProperty) {
-        alias = `\`${alias}\``;
+    const concat = (parts: string[]): string => (isMMDb ? `CONCAT(${parts.join(', ')})` : parts.join(' || '));
+
+    const getDateColumnExpression = (columnAlias: string): string => {
+      switch (dbType) {
+        case 'mysql':
+        case 'mariadb':
+          return `UNIX_TIMESTAMP(${columnAlias}) * 1000`;
+        case 'postgres':
+          return `EXTRACT(EPOCH FROM ${columnAlias}) * 1000`;
+        case 'sqlite':
+          return `(STRFTIME('%s', ${columnAlias}) + (STRFTIME('%f', ${columnAlias}) - STRFTIME('%S', ${columnAlias}))) * 1000`;
+        default:
+          return columnAlias;
       }
-      if (nullSort) {
-        queryBuilder.addOrderBy(`${alias} ${nullSort}`);
+    };
+
+    const generateNullCursorExpr = (): string => {
+      const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType);
+      const prefix = 'A';
+
+      return isMMDb ? `CONCAT('${prefix}', ${zeroPaddedExpr})` : `'${prefix}' || ${zeroPaddedExpr}`;
+    };
+
+    const generateDateCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
+      const safeExpr = `COALESCE(${columnExpr}, 0)`;
+      const sqlExpr = direction === 'ASC' ? `POW(10, ${padLength}) - ${safeExpr}` : safeExpr;
+
+      const paddedExpr = getPaddedExpr(sqlExpr, padLength, dbType);
+      const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType);
+
+      const prefixNull = "'A'";
+      const prefixValue = "'V'";
+      const prefixZero = "'X'";
+
+      if (direction === 'ASC') {
+        return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${concat([prefixNull, zeroPaddedExpr])}
+                        WHEN ${columnExpr} = 0 THEN ${concat([prefixZero, zeroPaddedExpr])}
+                        ELSE ${concat([prefixValue, paddedExpr])}
+                    END`;
+      } else {
+        return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${concat([prefixNull, zeroPaddedExpr])}
+                        ELSE ${concat([prefixValue, paddedExpr])}
+                    END`;
       }
-      queryBuilder.addOrderBy(alias, order[1]);
-    } else {
-      if (isVirtualProperty) {
-        alias = `"${alias}"`;
+    };
+
+    const generateNumberCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
+      const safeExpr = `COALESCE(${columnExpr}, 0)`;
+      const absSafeExpr = `ABS(${safeExpr})`;
+      const scaledExpr = `ROUND(${absSafeExpr} * ${fixedScale}, 0)`;
+      const intExpr = `FLOOR(${scaledExpr} / ${fixedScale})`;
+      const decExpr = `(${scaledExpr} % ${fixedScale})`;
+      const reversedIntExpr = `(${maxIntegerDigit} - ${intExpr})`;
+      const reversedDecExpr = `(${fixedScale} - ${decExpr})`;
+
+      const paddedIntExpr = getPaddedExpr(intExpr, integerLength, dbType);
+      const paddedDecExpr = getPaddedExpr(decExpr, decimalLength, dbType);
+      const reversedIntPaddedExpr = getPaddedExpr(reversedIntExpr, integerLength, dbType);
+      const reversedDecPaddedExpr = getPaddedExpr(reversedDecExpr, decimalLength, dbType);
+      const zeroPaddedIntExpr = getPaddedExpr('0', integerLength, dbType);
+      const zeroPaddedDecExpr = getPaddedExpr('0', decimalLength, dbType);
+
+      if (direction === 'ASC') {
+        return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
+                        WHEN ${columnExpr} < 0 THEN ${concat(["'Y'", paddedIntExpr, "'V'", paddedDecExpr])}
+                        WHEN ${columnExpr} = 0 THEN ${concat(["'X'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat(["'X'", zeroPaddedIntExpr, "'V'", reversedDecPaddedExpr])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat(["'V'", reversedIntPaddedExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat(["'V'", reversedIntPaddedExpr, "'V'", reversedDecPaddedExpr])}
+                    END`;
+      } else {
+        return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat(["'M'", reversedIntPaddedExpr, "'V'", reversedDecPaddedExpr])}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat(["'M'", reversedIntPaddedExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat(["'N'", zeroPaddedIntExpr, "'V'", reversedDecPaddedExpr])}
+                        WHEN ${columnExpr} = 0 THEN ${concat(["'N'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 THEN ${concat(["'V'", paddedIntExpr, "'V'", paddedDecExpr])}
+                    END`;
       }
-      queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined);
+    };
+
+    const cursorExpressions = sortBy.map(([column, direction]) => {
+      const columnProperties = getPropertiesByColumnName(String(column));
+      const alias = fixColumnAlias(columnProperties, queryBuilder.alias, false, false, false);
+      const isDate = isDateMetadataColumn(config.metadataColumns, String(column));
+      const columnExpr = isDate ? getDateColumnExpression(alias) : alias;
+
+      return isDate ? generateDateCursorExpr(columnExpr, direction) : generateNumberCursorExpr(columnExpr, direction);
+    });
+
+    const cursorExpression = cursorExpressions.length > 1 ? (isMMDb ? `CONCAT(${cursorExpressions.join(', ')})` : cursorExpressions.join(' || ')) : cursorExpressions[0];
+    queryBuilder.addSelect(cursorExpression, 'cursor');
+
+    if (query.cursor) {
+      queryBuilder.andWhere(`${cursorExpression} < :cursor`, { cursor: query.cursor });
+    }
+
+    // `cursor` is a reserved word in mysql, wrap it in backticks to recognize it as an alias.
+    isMMDb ? queryBuilder.orderBy('`cursor`', 'DESC') : queryBuilder.orderBy('cursor', 'DESC');
+  } else {
+    for (const order of sortBy) {
+      const columnProperties = getPropertiesByColumnName(order[0]);
+      const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties);
+
+      const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath!);
+      const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath!);
+      let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded);
+
+      if (isMMDb) {
+        if (isVirtualProperty) {
+          alias = `\`${alias}\``;
+        }
+        if (nullSort) {
+          queryBuilder.addOrderBy(`${alias} ${nullSort}`);
+        }
+        queryBuilder.addOrderBy(alias, order[1]);
+      } else {
+        if (isVirtualProperty) {
+          alias = `"${alias}"`;
+        }
+        queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined);
+      }
     }
   }
 
@@ -203,11 +428,21 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
 
   if (query.limit === PaginationLimit.COUNTER_ONLY) {
     totalItems = await getCount(queryBuilder);
+  } else if (isCursorPagination) {
+    // Cursor pagination intentionally skips the count query (totalItems is not exposed).
+    items = await queryBuilder.getRawMany<T>();
   } else if (isPaginated) {
     items = await queryBuilder.getRawMany<T>(); //
     totalItems = await getCount(queryBuilder);
   } else {
     items = await queryBuilder.getRawMany<T>();
+  }
+
+  // The SQL-computed `cursor` column is only needed for WHERE/ORDER BY; strip it from the output.
+  if (isCursorPagination) {
+    for (const item of items) {
+      delete (item as Record<string, unknown>).cursor;
+    }
   }
   const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('');
   const searchQuery = query.search ? `&search=${query.search}` : '';
@@ -244,31 +479,51 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
   }
   const buildLink = (p: number): string => path + '?page=' + p + options;
 
+  const reversedSortBy = sortBy.map(([col, dir]) => [col, dir === 'ASC' ? 'DESC' : 'ASC'] as Order<T>);
+
+  const buildLinkForCursor = (cursor: string | undefined, isReversed = false): string => {
+    let adjustedOptions = options;
+
+    if (isReversed && sortBy.length > 0) {
+      const reversedSortByQuery = reversedSortBy.map((order) => `&sortBy=${order.join(':')}`).join('');
+      adjustedOptions = `&limit=${limit}${reversedSortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`;
+    }
+
+    return path + adjustedOptions.replace(/^./, '?') + (cursor ? `&cursor=${cursor}` : '');
+  };
+
   const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1;
 
   const results: Paginated<T> = {
     data: items,
     meta: {
-      itemsPerPage: limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
-      totalItems: limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
-      currentPage: page,
-      totalPages,
+      itemsPerPage: isCursorPagination ? items.length : limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
+      totalItems: isCursorPagination ? undefined : limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
+      currentPage: isCursorPagination ? undefined : page,
+      totalPages: isCursorPagination ? undefined : totalPages,
       sortBy,
       search: query.search!,
       searchBy: query.search ? searchBy : [],
       select: isQuerySelected ? selectParams || [] : [],
       filter: query.filter,
+      cursor: isCursorPagination ? query.cursor : undefined,
     },
     // If there is no `path`, don't build links.
     links:
       path !== null
-        ? {
-            first: page == 1 ? undefined : buildLink(1),
-            previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-            current: buildLink(page),
-            next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-            last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-          }
+        ? isCursorPagination
+          ? {
+              previous: items.length ? buildLinkForCursor(generateRawCursor(items[0], reversedSortBy, config.metadataColumns), true) : undefined,
+              current: buildLinkForCursor(query.cursor),
+              next: items.length ? buildLinkForCursor(generateRawCursor(items[items.length - 1], sortBy, config.metadataColumns), false) : undefined,
+            }
+          : {
+              first: page == 1 ? undefined : buildLink(1),
+              previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+              current: buildLink(page),
+              next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+              last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+            }
         : ({} as Paginated<T>['links']),
   };
 
@@ -294,7 +549,7 @@ export async function getCount(qb: SelectQueryBuilder<ObjectLiteral>) {
   return Number.parseInt(result.cnt);
 }
 
-type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> };
+type Filter = { quantifier: FilterQuantifier; comparator: FilterComparator; findOperator: FindOperator<string> };
 type ColumnsFilters = { [columnName: string]: Filter[] };
 
 export function parseFilterForRawQuery<T extends ObjectLiteral>(query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, qb?: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }): ColumnsFilters {
@@ -331,6 +586,7 @@ export function parseFilterForRawQuery<T extends ObjectLiteral>(query: PaginateQ
       }
 
       const params: (typeof filter)[0][0] = {
+        quantifier: token.quantifier,
         comparator: token.comparator,
         findOperator: undefined!,
       };
@@ -365,6 +621,7 @@ export function parseFilterForRawQuery<T extends ObjectLiteral>(query: PaginateQ
         const jsonFixValue = fixRawColumnFilterValue(column, qb!, metadataColumns, true);
 
         const jsonParams = {
+          quantifier: params.quantifier,
           comparator: params.comparator,
           findOperator: JsonContains({
             [jsonColumnName]: jsonFixValue(token.value),
