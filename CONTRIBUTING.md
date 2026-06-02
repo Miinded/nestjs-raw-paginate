@@ -43,26 +43,30 @@ The tests connect to MariaDB using the following environment variables (with sen
 
 ## Available scripts
 
-| Script              | Description                                             |
-| ------------------- | ------------------------------------------------------- |
-| `pnpm build`        | Compile TypeScript to `lib/`                            |
-| `pnpm test`         | Run the Jest test suite                                 |
-| `pnpm test:cov`     | Run tests with a coverage report                        |
-| `pnpm lint`         | Lint the source with ESLint (type-checked)              |
-| `pnpm format`       | Format all files with Prettier                          |
-| `pnpm format:check` | Check formatting without writing                        |
-| `pnpm deps:check`   | Enforce the dependency policy (framework deps as peers) |
-| `pnpm ci:quality`   | Full local CI gate: deps + lint + format + test + build |
+| Script               | Description                                                 |
+| -------------------- | ----------------------------------------------------------- |
+| `pnpm build`         | Compile TypeScript to `lib/`                                |
+| `pnpm test`          | Run all test types (`unit` + `int` + `e2e`)                 |
+| `pnpm test:unit`     | Run unit tests (`*.unit.spec.ts`)                           |
+| `pnpm test:int`      | Run integration tests (`*.int.spec.ts`, needs MariaDB)      |
+| `pnpm test:e2e`      | Run end-to-end tests (`*.e2e.spec.ts`)                      |
+| `pnpm test:coverage` | Run tests with a coverage report                            |
+| `pnpm lint`          | Lint the source with ESLint (type-checked)                  |
+| `pnpm format`        | Format all files with Prettier                              |
+| `pnpm format:check`  | Check formatting without writing                            |
+| `pnpm deps:check`    | Enforce the dependency policy (framework deps as peers)     |
+| `pnpm barrels:check` | Verify barrel (`index.ts`) exports are in sync              |
+| `pnpm ci:quality`    | Full CI gate: deps + barrels + lint + test:coverage + build |
 
 ## Git hooks
 
 [Husky](https://typicode.github.io/husky/) runs the following hooks automatically:
 
-| Hook         | Action                                                         |
-| ------------ | -------------------------------------------------------------- |
-| `pre-commit` | `lint-staged` — formats staged files with Prettier             |
-| `commit-msg` | `commitlint` — validates Conventional Commits format           |
-| `pre-push`   | `deps:check` + `lint` + `build` — prevents pushing broken code |
+| Hook         | Action                                                    |
+| ------------ | --------------------------------------------------------- |
+| `pre-commit` | `lint-staged` — formats staged files with Prettier        |
+| `commit-msg` | `commitlint` — validates Conventional Commits format      |
+| `pre-push`   | `deps:check` + `test:unit` — prevents pushing broken code |
 
 ## Commit conventions
 

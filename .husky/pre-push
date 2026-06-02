@@ -1,3 +1,2 @@
 pnpm deps:check
-pnpm lint
-pnpm build
+pnpm test:unit

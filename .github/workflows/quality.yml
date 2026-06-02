@@ -60,6 +60,9 @@ jobs:
       - name: Dependency policy check
         run: pnpm deps:check
 
+      - name: Barrel check
+        run: pnpm barrels:check
+
       - name: Lint
         run: pnpm lint
 
@@ -72,8 +75,14 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Tests with coverage
-        run: pnpm test:cov
+      - name: Unit tests with coverage
+        run: pnpm test:coverage
+
+      - name: Integration tests
+        run: pnpm test:int
+
+      - name: E2E tests
+        run: pnpm test:e2e
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == 24

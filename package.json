@@ -46,15 +46,18 @@
     "lint": "eslint .",
     "format": "prettier --config .prettierrc.json --write .",
     "format:check": "prettier --config .prettierrc.json --check .",
-    "test": "jest",
+    "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
+    "test:unit": "jest --passWithNoTests \"\\.unit\\.spec\\.ts$\"",
+    "test:int": "jest --passWithNoTests \"\\.int\\.spec\\.ts$\"",
+    "test:e2e": "jest --passWithNoTests \"\\.e2e\\.spec\\.ts$\"",
+    "test:coverage": "jest --coverage --passWithNoTests",
     "test:watch": "jest --watchAll",
-    "test:cov": "jest --coverage",
-    "test:covw": "jest --coverage --watch",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "barrels:check": "node ./config/check-barrels.mjs",
     "commitlint": "commitlint",
     "deps:check": "node ./config/check-dependency-policy.mjs",
-    "ci:quality": "pnpm deps:check && pnpm lint && pnpm format:check && pnpm test:cov && pnpm build",
-    "release": "pnpm ci:quality && changeset version && pnpm build && changeset publish"
+    "ci:quality": "pnpm deps:check && pnpm barrels:check && pnpm lint && pnpm test:coverage && pnpm build",
+    "release": "pnpm deps:check && pnpm barrels:check && pnpm lint && pnpm test:coverage && changeset version && pnpm build && changeset publish"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}": "prettier --config .prettierrc.json --write --ignore-unknown"
