@@ -1,8 +1,41 @@
 /* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 import { ServiceUnavailableException } from '@nestjs/common';
-import { PaginateConfig as OPaginateConfig, Paginated, PaginateQuery, PaginationLimit, PaginationType } from 'nestjs-paginate';
-import { Column, positiveNumberOrDefault, SortBy, isEntityKey, Order, getPropertiesByColumnName, checkIsRelation, checkIsEmbedded, fixColumnAlias, includesAllPrimaryKeyColumns, getQueryUrlComponents, isISODate, ColumnProperties, getPaddedExpr } from 'nestjs-paginate/lib/helper';
-import { FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix, fixQueryParam, generatePredicateCondition, isOperator, isSuffix, OperatorSymbolToFunction, parseFilter, parseFilterToken } from 'nestjs-paginate/lib/filter';
+import {
+  PaginateConfig as OPaginateConfig,
+  Paginated,
+  PaginateQuery,
+  PaginationLimit,
+  PaginationType,
+} from 'nestjs-paginate';
+import {
+  Column,
+  positiveNumberOrDefault,
+  SortBy,
+  isEntityKey,
+  Order,
+  getPropertiesByColumnName,
+  checkIsRelation,
+  checkIsEmbedded,
+  fixColumnAlias,
+  includesAllPrimaryKeyColumns,
+  getQueryUrlComponents,
+  isISODate,
+  ColumnProperties,
+  getPaddedExpr,
+} from 'nestjs-paginate/lib/helper';
+import {
+  FilterComparator,
+  FilterOperator,
+  FilterQuantifier,
+  FilterSuffix,
+  fixQueryParam,
+  generatePredicateCondition,
+  isOperator,
+  isSuffix,
+  OperatorSymbolToFunction,
+  parseFilter,
+  parseFilterToken,
+} from 'nestjs-paginate/lib/filter';
 import { Brackets, FindOperator, JsonContains, ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { mapKeys } from 'lodash';
 import { stringify } from 'querystring';
@@ -95,7 +128,12 @@ function generateNumberCursor(value: number, direction: 'ASC' | 'DESC'): string 
     }
   }
 
-  return integerPrefix + String(finalInteger).padStart(integerLength, '0') + decimalPrefix + String(finalDecimal).padStart(decimalLength, '0');
+  return (
+    integerPrefix +
+    String(finalInteger).padStart(integerLength, '0') +
+    decimalPrefix +
+    String(finalDecimal).padStart(decimalLength, '0')
+  );
 }
 
 function isDateMetadataColumn(metadataColumns: { [column: string]: string } | undefined, column: string): boolean {
@@ -105,7 +143,11 @@ function isDateMetadataColumn(metadataColumns: { [column: string]: string } | un
 
 // Raw equivalent of the official `generateCursor`: raw rows are flat objects keyed by
 // the SELECT alias, so we read `item[column]` directly instead of traversing relations.
-function generateRawCursor<T extends ObjectLiteral>(item: T, sortBy: SortBy<T>, metadataColumns?: { [column: string]: string }): string {
+function generateRawCursor<T extends ObjectLiteral>(
+  item: T,
+  sortBy: SortBy<T>,
+  metadataColumns?: { [column: string]: string },
+): string {
   return sortBy
     .map(([column, direction]) => {
       const value = fixCursorValue((item as Record<string, unknown>)[String(column)]);
@@ -123,14 +165,30 @@ function generateRawCursor<T extends ObjectLiteral>(item: T, sortBy: SortBy<T>, 
     .join('');
 }
 
-export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery, qb: SelectQueryBuilder<T>, config: RawPaginateConfig<T>): Promise<Paginated<T>> {
+export async function rawPaginate<T extends ObjectLiteral>(
+  query: PaginateQuery,
+  qb: SelectQueryBuilder<T>,
+  config: RawPaginateConfig<T>,
+): Promise<Paginated<T>> {
   const page = positiveNumberOrDefault(query.page, 1, 1);
 
   const defaultLimit = config.defaultLimit || globalConfig.defaultLimit;
   const maxLimit = config.maxLimit || globalConfig.defaultMaxLimit;
-  const isPaginated = !(query.limit === PaginationLimit.COUNTER_ONLY || (query.limit === PaginationLimit.NO_PAGINATION && maxLimit === PaginationLimit.NO_PAGINATION));
+  const isPaginated = !(
+    query.limit === PaginationLimit.COUNTER_ONLY ||
+    (query.limit === PaginationLimit.NO_PAGINATION && maxLimit === PaginationLimit.NO_PAGINATION)
+  );
 
-  const limit = query.limit === PaginationLimit.COUNTER_ONLY ? PaginationLimit.COUNTER_ONLY : isPaginated === true ? (maxLimit === PaginationLimit.NO_PAGINATION ? (query.limit ?? defaultLimit) : query.limit === PaginationLimit.NO_PAGINATION ? defaultLimit : Math.min(query.limit ?? defaultLimit, maxLimit)) : defaultLimit;
+  const limit =
+    query.limit === PaginationLimit.COUNTER_ONLY
+      ? PaginationLimit.COUNTER_ONLY
+      : isPaginated === true
+        ? maxLimit === PaginationLimit.NO_PAGINATION
+          ? (query.limit ?? defaultLimit)
+          : query.limit === PaginationLimit.NO_PAGINATION
+            ? defaultLimit
+            : Math.min(query.limit ?? defaultLimit, maxLimit)
+        : defaultLimit;
 
   const sortBy = [] as SortBy<T>;
   const searchBy: Column<T>[] = [];
@@ -292,7 +350,12 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
       return isDate ? generateDateCursorExpr(columnExpr, direction) : generateNumberCursorExpr(columnExpr, direction);
     });
 
-    const cursorExpression = cursorExpressions.length > 1 ? (isMMDb ? `CONCAT(${cursorExpressions.join(', ')})` : cursorExpressions.join(' || ')) : cursorExpressions[0];
+    const cursorExpression =
+      cursorExpressions.length > 1
+        ? isMMDb
+          ? `CONCAT(${cursorExpressions.join(', ')})`
+          : cursorExpressions.join(' || ')
+        : cursorExpressions[0];
     queryBuilder.addSelect(cursorExpression, 'cursor');
 
     if (query.cursor) {
@@ -300,7 +363,11 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
     }
 
     // `cursor` is a reserved word in mysql, wrap it in backticks to recognize it as an alias.
-    isMMDb ? queryBuilder.orderBy('`cursor`', 'DESC') : queryBuilder.orderBy('cursor', 'DESC');
+    if (isMMDb) {
+      queryBuilder.orderBy('`cursor`', 'DESC');
+    } else {
+      queryBuilder.orderBy('cursor', 'DESC');
+    }
   } else {
     for (const order of sortBy) {
       const columnProperties = getPropertiesByColumnName(order[0]);
@@ -329,7 +396,10 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
 
   // When we partial select the columns (main or relation) we must add the primary key column otherwise
   // typeorm will not be able to map the result.
-  let selectParams = config.select && query.select && !config.ignoreSelectInQueryParam ? config.select.filter((column) => query.select?.includes(column)) : config.select;
+  let selectParams =
+    config.select && query.select && !config.ignoreSelectInQueryParam
+      ? config.select.filter((column) => query.select?.includes(column))
+      : config.select;
   if (query.select && !includesAllPrimaryKeyColumns(queryBuilder, query.select)) {
     selectParams = config.select;
   }
@@ -399,7 +469,14 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
                   const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(subQb, property);
                   const isRelation = checkIsRelation(subQb, property.propertyPath!);
                   const isEmbedded = checkIsEmbedded(subQb, property.propertyPath!);
-                  const alias = fixColumnAlias(property, subQb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery);
+                  const alias = fixColumnAlias(
+                    property,
+                    subQb.alias,
+                    isRelation,
+                    isVirtualProperty,
+                    isEmbedded,
+                    virtualQuery,
+                  );
 
                   const condition: WherePredicateOperator = {
                     operator: 'ilike',
@@ -447,7 +524,10 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
   const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('');
   const searchQuery = query.search ? `&search=${query.search}` : '';
 
-  const searchByQuery = query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam ? searchBy.map((column) => `&searchBy=${column}`).join('') : '';
+  const searchByQuery =
+    query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam
+      ? searchBy.map((column) => `&searchBy=${column}`).join('')
+      : '';
 
   // Only expose select in meta data if query select differs from config select
   const isQuerySelected = selectParams?.length !== config.select?.length;
@@ -497,8 +577,18 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
   const results: Paginated<T> = {
     data: items,
     meta: {
-      itemsPerPage: isCursorPagination ? items.length : limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
-      totalItems: isCursorPagination ? undefined : limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
+      itemsPerPage: isCursorPagination
+        ? items.length
+        : limit === PaginationLimit.COUNTER_ONLY
+          ? totalItems
+          : isPaginated
+            ? limit
+            : items.length,
+      totalItems: isCursorPagination
+        ? undefined
+        : limit === PaginationLimit.COUNTER_ONLY || isPaginated
+          ? totalItems
+          : items.length,
       currentPage: isCursorPagination ? undefined : page,
       totalPages: isCursorPagination ? undefined : totalPages,
       sortBy,
@@ -513,9 +603,13 @@ export async function rawPaginate<T extends ObjectLiteral>(query: PaginateQuery,
       path !== null
         ? isCursorPagination
           ? {
-              previous: items.length ? buildLinkForCursor(generateRawCursor(items[0], reversedSortBy, config.metadataColumns), true) : undefined,
+              previous: items.length
+                ? buildLinkForCursor(generateRawCursor(items[0], reversedSortBy, config.metadataColumns), true)
+                : undefined,
               current: buildLinkForCursor(query.cursor),
-              next: items.length ? buildLinkForCursor(generateRawCursor(items[items.length - 1], sortBy, config.metadataColumns), false) : undefined,
+              next: items.length
+                ? buildLinkForCursor(generateRawCursor(items[items.length - 1], sortBy, config.metadataColumns), false)
+                : undefined,
             }
           : {
               first: page == 1 ? undefined : buildLink(1),
@@ -552,7 +646,12 @@ export async function getCount(qb: SelectQueryBuilder<ObjectLiteral>) {
 type Filter = { quantifier: FilterQuantifier; comparator: FilterComparator; findOperator: FindOperator<string> };
 type ColumnsFilters = { [columnName: string]: Filter[] };
 
-export function parseFilterForRawQuery<T extends ObjectLiteral>(query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, qb?: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }): ColumnsFilters {
+export function parseFilterForRawQuery<T extends ObjectLiteral>(
+  query: PaginateQuery,
+  filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
+  qb?: SelectQueryBuilder<T>,
+  metadataColumns?: { [column: string]: string },
+): ColumnsFilters {
   const filter: ColumnsFilters = {};
   if (!filterableColumns || !query.filter) {
     return {};
@@ -639,29 +738,39 @@ export function parseFilterForRawQuery<T extends ObjectLiteral>(query: PaginateQ
 
       if (token.suffix) {
         const lastFilterElement = filter[column].length - 1;
-        filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)!(filter[column][lastFilterElement].findOperator);
+        filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)!(
+          filter[column][lastFilterElement].findOperator,
+        );
       }
     }
   }
   return filter;
 }
 
-export function formatFilter<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }, metadataColumns?: { [column: string]: string }) {
+export function formatFilter<T extends ObjectLiteral>(
+  qb: SelectQueryBuilder<T>,
+  query: PaginateQuery,
+  filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
+  metadataColumns?: { [column: string]: string },
+) {
   if (qb?.expressionMap?.mainAlias?.hasMetadata) {
     return parseFilter(query, filterableColumns, qb);
   }
   return parseFilterForRawQuery(query, filterableColumns, qb, metadataColumns);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-export function addFilter<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, query: PaginateQuery, filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true } | any, metadataColumns?: { [column: string]: string }): SelectQueryBuilder<T> {
+export function addFilter<T extends ObjectLiteral>(
+  qb: SelectQueryBuilder<T>,
+  query: PaginateQuery,
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true } | any,
+  metadataColumns?: { [column: string]: string },
+): SelectQueryBuilder<T> {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const filter = formatFilter(qb, query, filterableColumns, metadataColumns);
 
   const filterEntries = Object.entries(filter);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const orFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$or');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const andFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$and');
 
   qb.andWhere(
@@ -683,7 +792,12 @@ export function addFilter<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, qu
   return qb;
 }
 
-export function fixRawColumnFilterValue<T extends ObjectLiteral>(column: string, qb: SelectQueryBuilder<T>, metadataColumns?: { [column: string]: string }, isJsonb = false) {
+export function fixRawColumnFilterValue<T extends ObjectLiteral>(
+  column: string,
+  qb: SelectQueryBuilder<T>,
+  metadataColumns?: { [column: string]: string },
+  isJsonb = false,
+) {
   // Instancier un objet temporaire de T
   const columnType = metadataColumns && metadataColumns[column] ? metadataColumns[column] : 'string';
 
@@ -701,7 +815,11 @@ export function fixRawColumnFilterValue<T extends ObjectLiteral>(column: string,
 }
 
 // It's only overrided for extractVirtualProperty method.
-export function addWhereCondition<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
+export function addWhereCondition<T extends ObjectLiteral>(
+  qb: SelectQueryBuilder<T>,
+  column: string,
+  filter: ColumnsFilters,
+) {
   const columnProperties = getPropertiesByColumnName(column);
 
   const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties);
@@ -727,8 +845,10 @@ export function addWhereCondition<T extends ObjectLiteral>(qb: SelectQueryBuilde
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function extractVirtualProperty<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, columnProperties: ColumnProperties): Partial<ColumnMetadata> {
+export function extractVirtualProperty<T extends ObjectLiteral>(
+  _qb: SelectQueryBuilder<T>,
+  _columnProperties: ColumnProperties,
+): Partial<ColumnMetadata> {
   return {
     isVirtualProperty: false,
     query: undefined,

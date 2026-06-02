@@ -1,13 +1,29 @@
 {
-  "name": "@miinded/nestjs-paginate",
+  "name": "@miinded/nestjs-raw-paginate",
   "version": "0.0.7",
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@gitlab.com/miinded/nestjs-paginate.git"
-  },
   "description": "Pagination and filtering helper method for raw query using Nest.js framework.",
   "license": "MIT",
   "author": "Starker-xp <starker-xp@miinded.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Miinded/nestjs-raw-paginate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Miinded/nestjs-raw-paginate/issues"
+  },
+  "homepage": "https://github.com/Miinded/nestjs-raw-paginate#readme",
+  "keywords": [
+    "nestjs",
+    "typeorm",
+    "express",
+    "pagination",
+    "paginate",
+    "raw",
+    "querybuilder",
+    "cursor",
+    "filtering",
+    "search"
+  ],
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -16,17 +32,31 @@
     "!lib/**/*.spec.*",
     "!lib/tsconfig.tsbuildinfo"
   ],
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "prepare": "husky",
     "prebuild": "rimraf lib",
     "build": "tsc --project tsconfig.json",
-    "prepare": "npm run build",
-    "release": "npm run lint && npm run build && changelogen --release && npm publish && git push --follow-tags",
     "lint": "eslint .",
+    "format": "prettier --config .prettierrc.json --write .",
+    "format:check": "prettier --config .prettierrc.json --check .",
     "test": "jest",
-    "test:watch": "jest --watchAll ",
+    "test:watch": "jest --watchAll",
     "test:cov": "jest --coverage",
-    "test:covw": "jest --coverage  --watch",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
+    "test:covw": "jest --coverage --watch",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "commitlint": "commitlint",
+    "ci:quality": "pnpm lint && pnpm format:check && pnpm test:cov && pnpm build",
+    "release": "pnpm ci:quality && changeset version && pnpm build && changeset publish"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}": "prettier --config .prettierrc.json --write --ignore-unknown"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
@@ -37,6 +67,9 @@
     "typeorm": "0.3.27"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.36.0",
     "@nestjs/swagger": "^11.2.0",
@@ -45,13 +78,13 @@
     "@types/jest": "^30.0.0",
     "@types/lodash": "^4.17.20",
     "@types/node": "^24.6.0",
-    "changelogen": "^0.6.2",
     "dotenv": "^17.2.3",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.4",
     "globals": "^16.4.0",
+    "husky": "^9.1.7",
     "jest": "^30.2.0",
+    "lint-staged": "^15.5.2",
     "mysql": "^2.18.1",
     "prettier": "^3.6.2",
     "reflect-metadata": "^0.2.2",
@@ -87,11 +120,6 @@
     "coveragePathIgnorePatterns": [
       "/node_modules/",
       "/lib/"
-    ]
-  },
-  "release": {
-    "branches": [
-      "master"
     ]
   }
 }
