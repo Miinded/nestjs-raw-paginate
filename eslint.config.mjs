@@ -10,6 +10,7 @@ export default tseslint.config(
       //
       'eslint.config.mjs',
       'commitlint.config.cjs',
+      'config/',
       'lib/',
       'coverage/',
       'src/__tests__/**/*',
