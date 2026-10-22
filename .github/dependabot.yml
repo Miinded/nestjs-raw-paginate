@@ -8,6 +8,10 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
+    ignore:
+      # Major upgrades are done deliberately, not through Dependabot.
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
     groups:
       nestjs-core:
         patterns:
@@ -31,3 +35,10 @@ updates:
     labels:
       - dependencies
       - github-actions
+    ignore:
+      # v7 drops the placeholder NODE_AUTH_TOKEN that the release .npmrc relies on.
+      - dependency-name: actions/setup-node
+        update-types: ['version-update:semver-major']
+      # v2 requires Changesets CLI v3.
+      - dependency-name: changesets/action
+        update-types: ['version-update:semver-major']
