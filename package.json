@@ -1,6 +1,6 @@
 {
   "name": "@miinded/nestjs-raw-paginate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pagination and filtering helper method for raw query using Nest.js framework.",
   "license": "MIT",
   "author": "Starker-xp <starker-xp@miinded.com>",
