@@ -220,6 +220,37 @@ describe('paginate', () => {
     expect(results.data[0].orderId).toEqual('order-2');
   });
 
+  it('should ignore polymorphic sort groups from the query', async () => {
+    const config: PaginateConfig<QueryDto> = {
+      sortableColumns: ['orderId', 'refundState'],
+      defaultSortBy: [['orderId', 'DESC']],
+    };
+    const query: PaginateQuery = {
+      sortBy: [[['orderId', 'refundState'], 'ASC']],
+      path: '',
+    };
+
+    const qb = dataSource.createQueryBuilder().select('o.id', 'orderId').from<QueryDto>('order', 'o');
+
+    const results = await rawPaginate<QueryDto>(query, qb, config);
+
+    expect(results.meta.sortBy).toEqual([['orderId', 'DESC']]);
+  });
+
+  it('should reject polymorphic sort groups in defaultSortBy', async () => {
+    const config: PaginateConfig<QueryDto> = {
+      sortableColumns: ['orderId', 'refundState'],
+      defaultSortBy: [[['orderId', 'refundState'], 'ASC']],
+    };
+    const query: PaginateQuery = { path: '' };
+
+    const qb = dataSource.createQueryBuilder().select('o.id', 'orderId').from<QueryDto>('order', 'o');
+
+    await expect(rawPaginate<QueryDto>(query, qb, config)).rejects.toThrow(
+      'Polymorphic sort groups are not supported by rawPaginate.',
+    );
+  });
+
   afterAll(async () => {
     await dataSource.destroy();
   });

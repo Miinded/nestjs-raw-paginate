@@ -6,7 +6,7 @@ Contributions are welcome! This guide will help you get up and running on the pr
 
 | Tool    | Version                             |
 | ------- | ----------------------------------- |
-| Node.js | `>= 22`                             |
+| Node.js | `>= 24`                             |
 | pnpm    | `>= 10`                             |
 | Docker  | for the local MariaDB test database |
 

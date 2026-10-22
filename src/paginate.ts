@@ -141,6 +141,14 @@ function isDateMetadataColumn(metadataColumns: { [column: string]: string } | un
   return typeof type === 'string' && type.toLowerCase() === 'date';
 }
 
+// nestjs-paginate >= 13.4 allows polymorphic sort groups (`colA~colB`, an array column),
+// which raw subqueries cannot express: only single-column orders are supported here.
+type SingleColumnOrder<T> = [Column<T>, Order<T>[1]];
+
+function isSingleColumnOrder<T>(order: Order<T>): order is SingleColumnOrder<T> {
+  return !Array.isArray(order[0]);
+}
+
 // Raw equivalent of the official `generateCursor`: raw rows are flat objects keyed by
 // the SELECT alias, so we read `item[column]` directly instead of traversing relations.
 function generateRawCursor<T extends ObjectLiteral>(
@@ -190,7 +198,7 @@ export async function rawPaginate<T extends ObjectLiteral>(
             : Math.min(query.limit ?? defaultLimit, maxLimit)
         : defaultLimit;
 
-  const sortBy = [] as SortBy<T>;
+  const sortBy: SingleColumnOrder<T>[] = [];
   const searchBy: Column<T>[] = [];
 
   let [items, totalItems]: [T[], number] = [[], 0];
@@ -235,14 +243,22 @@ export async function rawPaginate<T extends ObjectLiteral>(
 
   if (query.sortBy) {
     for (const order of query.sortBy) {
-      if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-        sortBy.push(order as Order<T>);
+      if (
+        typeof order[0] === 'string' &&
+        isEntityKey(config.sortableColumns, order[0]) &&
+        ['ASC', 'DESC'].includes(order[1])
+      ) {
+        sortBy.push(order as SingleColumnOrder<T>);
       }
     }
   }
 
   if (!sortBy.length) {
-    sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]));
+    const defaultSortBy: SortBy<T> = config.defaultSortBy || [[config.sortableColumns[0], 'ASC']];
+    if (!defaultSortBy.every(isSingleColumnOrder)) {
+      throw new ServiceUnavailableException('Polymorphic sort groups are not supported by rawPaginate.');
+    }
+    sortBy.push(...defaultSortBy);
   }
 
   const isCursorPagination = isPaginated && config.paginationType === PaginationType.CURSOR;
